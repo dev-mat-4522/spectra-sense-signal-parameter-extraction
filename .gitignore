@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+backend/data/uploads/*
+backend/data/reports/*
+!backend/data/uploads/.gitkeep
+!backend/data/reports/.gitkeep
+data/synth/
+*.pt
+node_modules/
+frontend/.next/
+frontend/out/
+.env
+.DS_Store

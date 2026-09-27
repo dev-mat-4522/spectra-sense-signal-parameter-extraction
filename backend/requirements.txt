@@ -1,0 +1,14 @@
+# SpectraSense backend — light, deployment-safe deps.
+# torch is OPTIONAL (heuristic fallback works without it).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+numpy==1.26.4
+scipy==1.14.1
+fpdf2==2.7.9
+pydantic==2.10.4
+websockets==14.1
+# Optional ML (install separately for full AMC accuracy):
+# torch --index-url https://download.pytorch.org/whl/cpu
+
+reedsolo>=2.0

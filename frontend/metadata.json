@@ -1,0 +1,6 @@
+{
+  "name": "SpectraSense - Tactical RF Intelligence",
+  "description": "High-end corporate tactical RF signal intelligence platform featuring spectrum analysis, constellation diagrams, automated DAG pipeline decoding, and executive telemetry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

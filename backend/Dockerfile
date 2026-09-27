@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+WORKDIR /app
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ ./backend/
+COPY data ./data
+ENV SPECTRA_DATA_DIR=/app/backend/data SPECTRA_UPLOAD_DIR=/app/backend/data/uploads SPECTRA_REPORT_DIR=/app/backend/data/reports
+EXPOSE 8000
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

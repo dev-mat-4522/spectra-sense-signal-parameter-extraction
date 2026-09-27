@@ -11,4 +11,4 @@ websockets==14.1
 # Optional ML (install separately for full AMC accuracy):
 # torch --index-url https://download.pytorch.org/whl/cpu
 
-reedsolo>=2.0
+reedsolo==1.7.0

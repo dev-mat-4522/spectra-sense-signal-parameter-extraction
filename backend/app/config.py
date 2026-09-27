@@ -4,7 +4,11 @@ import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = Path(os.getenv("SPECTRA_DATA_DIR", str(BASE_DIR / "data")))
+if os.getenv("VERCEL") or os.getenv("VERCEL_URL"):
+    DATA_DIR = Path("/tmp/spectrasense_data")
+else:
+    DATA_DIR = Path(os.getenv("SPECTRA_DATA_DIR", str(BASE_DIR / "data")))
+
 UPLOAD_DIR = Path(os.getenv("SPECTRA_UPLOAD_DIR", str(DATA_DIR / "uploads")))
 REPORT_DIR = Path(os.getenv("SPECTRA_REPORT_DIR", str(DATA_DIR / "reports")))
 MODEL_PATH = Path(os.getenv("SPECTRA_MODEL_PATH", str(BASE_DIR / "app" / "ml" / "amc_cnn.pt")))

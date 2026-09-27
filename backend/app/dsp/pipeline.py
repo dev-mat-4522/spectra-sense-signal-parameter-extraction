@@ -152,7 +152,7 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
     emit("visualize", 96)
     wf = waterfall(x)
     const = constellation_points(best["dem"]["symbols"] if "symbols" in best["dem"] else x, sps_hint=1 if "symbols" in best["dem"] else sps)
-    psd = [round(float(v), 2) for v in psd_db(x)[:256]]
+    raw_psd = psd_db(x, 1024); psd = [round(float(v), 2) for v in raw_psd[::(len(raw_psd)//256)][:256]]
 
     emit("done", 100)
     return {

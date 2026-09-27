@@ -11,7 +11,9 @@ def psd_db(x: np.ndarray, fft_size: int = 1024) -> np.ndarray:
     seg = x[:fft_size] * np.hanning(fft_size)
     spec = np.fft.fftshift(np.fft.fft(seg, n=fft_size))
     mag = np.abs(spec) ** 2 + 1e-12
-    return (10 * np.log10(mag)).astype(float)
+    mag = 10 * np.log10(mag)
+    mag -= float(np.max(mag))
+    return mag.astype(float)
 
 
 def waterfall(x: np.ndarray, fft_size: int = 1024, frames: int = 64) -> list[list[float]]:
@@ -32,7 +34,8 @@ def waterfall(x: np.ndarray, fft_size: int = 1024, frames: int = 64) -> list[lis
             step = fft_size // 128
             mag = mag[::step][:128]
         # clip dynamic range for display stability
-        mag = np.clip(mag, float(np.max(mag)) - 80, float(np.max(mag)))
+        mag = mag - float(np.max(mag))
+        mag = np.clip(mag, -80, 0)
         out.append([round(float(v), 2) for v in mag])
         idx += hop
     if not out:  # tiny file fallback

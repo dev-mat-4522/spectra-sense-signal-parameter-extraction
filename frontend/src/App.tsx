@@ -15,7 +15,7 @@ import { SettingsView } from './components/SettingsView';
 import { UIShowcaseModal } from './components/UIShowcaseModal';
 import { CommandPalette } from './components/CommandPalette';
 import { PRESET_SIGNALS } from './data/mockSignals';
-import { NavigationTab, SignalSample, LogEntry } from './types';
+import { NavigationTab, SignalSample, LogEntry, BackendResult } from './types';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');

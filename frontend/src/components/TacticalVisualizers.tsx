@@ -6,12 +6,14 @@ interface WaveformProps {
   channel: WaveformChannel;
   onChangeChannel: (ch: WaveformChannel) => void;
   modulation: ModulationType;
+  analysisResult?: any;
 }
 
 export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
   channel,
   onChangeChannel,
   modulation,
+  analysisResult
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);

@@ -12,7 +12,7 @@ import {
   Sparkles,
   Zap
 } from 'lucide-react';
-import { SignalSample, WaveformChannel, NavigationTab } from '../types';
+import { SignalSample, WaveformChannel, NavigationTab, BackendResult } from '../types';
 import { LiveSpectrumAudioVisualizer } from './LiveSpectrumAudioVisualizer';
 import { TimeDomainWaveformCanvas, ConstellationDiagramCanvas } from './TacticalVisualizers';
 
@@ -26,7 +26,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   activeSignal,
   onNavigate,
-  onRunAnalysis,
+  onRunAnalysis, analysisResult,
 }) => {
   const [waveformChannel, setWaveformChannel] = useState<WaveformChannel>('combined');
 
@@ -203,7 +203,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <TimeDomainWaveformCanvas
             channel={waveformChannel}
             onChangeChannel={setWaveformChannel}
-            modulation={activeSignal.modulation}
+            modulation={activeSignal.modulation} analysisResult={analysisResult}
           />
         </div>
 

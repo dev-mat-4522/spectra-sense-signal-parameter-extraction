@@ -6,9 +6,9 @@ COPY frontend/ ./
 ENV NEXT_STATIC_EXPORT=1 NEXT_PUBLIC_API_URL=
 RUN npm run build
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /srv
-COPY --from=build /app/out ./frontend/out
+COPY --from=build /app/dist ./frontend/dist
 COPY backend/ ./backend/
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

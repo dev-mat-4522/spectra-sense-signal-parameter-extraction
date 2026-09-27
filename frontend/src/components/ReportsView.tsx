@@ -14,7 +14,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ activeSignal, presetSi
 
   const handleDownload = () => {
     if (activeJobId) {
-      window.open(`/api/report/${activeJobId}`, '_blank');
+      window.open((import.meta.env.VITE_API_URL || '') + `/api/report/${activeJobId}`, '_blank');
     }
     const reportData = analysisResult || activeSignal;
     const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });

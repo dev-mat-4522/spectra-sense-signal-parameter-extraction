@@ -76,7 +76,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
       // 1. Upload
       const formData = new FormData();
       formData.append('file', fileObj);
-      const upRes = await fetch('/api/upload', {
+      const upRes = await fetch((import.meta.env.VITE_API_URL || '') + '/api/upload', {
         method: 'POST',
         body: formData
       });
@@ -90,7 +90,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
       });
 
       // 2. Start Analyze
-      const anRes = await fetch(`/api/analyze/${job_id}`, {
+      const anRes = await fetch((import.meta.env.VITE_API_URL || '') + `/api/analyze/${job_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -107,7 +107,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
       let currentProgress = 0;
       
       const poll = setInterval(async () => {
-        const res = await fetch(`/api/results/${job_id}`);
+        const res = await fetch((import.meta.env.VITE_API_URL || '') + `/api/results/${job_id}`);
         if (!res.ok) return;
         const job = await res.json();
         

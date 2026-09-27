@@ -119,7 +119,7 @@ def load_signal(path: str | Path, sample_rate_hz: float | None = None) -> dict:
         fmt = "iq"
     else:
         raise ValueError(f"Unsupported extension {ext!r}. Use .IQ/.bin/.wav")
-    if sample_rate_hz and float(sample_rate_hz) > 0:
+    if fmt != "wav" and sample_rate_hz and float(sample_rate_hz) > 0:
         sr = float(sample_rate_hz)
 
     file_samples = int(len(x))
@@ -138,7 +138,7 @@ def load_signal(path: str | Path, sample_rate_hz: float | None = None) -> dict:
         "sample_rate": sr,  # None for raw IQ unless user supplies Fs
         "format": fmt,
         "dtype_origin": dtype_origin,
-        "fs_source": "user" if sample_rate_hz else ("wav-header" if fmt == "wav" else "blind-assumed"),
+        "fs_source": "wav_header" if fmt == "wav" else ("user" if sample_rate_hz else "blind-assumed"),
         "file_samples": file_samples,
         "file_bytes": int(p.stat().st_size),
         "noise_floor": noise_floor,

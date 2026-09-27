@@ -221,7 +221,7 @@ export const VisualizationsView: React.FC<VisualizationsViewProps> = ({ activeSi
               <Activity className="w-4 h-4 text-emerald-400" />
               <span>POWER SPECTRAL DENSITY (PSD)</span>
             </span>
-            <span className="text-[10px] font-mono text-emerald-400/90">dBm / Hz</span>
+            <span className="text-[10px] font-mono text-emerald-400/90">dB / Hz (rel)</span>
           </div>
 
           <div className="mt-4 relative rounded-lg overflow-hidden border border-[#172B21] bg-[#080E0B] h-[340px]">

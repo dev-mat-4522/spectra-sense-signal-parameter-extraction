@@ -66,18 +66,26 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
 
     emit("amc", 35)
     
+    amc = classify(x, sps=sps)
     is_audio = info["format"] == "wav" and info["sample_rate"] <= 48000
-    
-    if is_audio:
-        # It's an audio file, likely AFSK packet radio
-        amc = {
-            "modulation": "AFSK", 
-            "confidence": 0.99, 
-            "probs": {"AFSK": 0.99}, 
-            "engine": "audio-heuristic"
-        }
-    else:
-        amc = classify(x, sps=sps)
+    if is_audio and not ov.get("modulation"):
+        baud = float(params.get("symbol_rate_hz", 0))
+        # If it's an audio file and looks like 1200 baud BPSK (AO-73/FUNcube)
+        if 1150 <= baud <= 1250:
+            amc = {
+                "modulation": "BPSK",
+                "confidence": 0.99,
+                "probs": {"BPSK": 0.99},
+                "engine": "audio-heuristic-ao73"
+            }
+        elif amc["modulation"] not in ("BPSK", "QPSK", "AFSK"):
+            # Fallback for generic audio if classifier hallucinates QAM
+            amc = {
+                "modulation": "AFSK", 
+                "confidence": 0.85, 
+                "probs": {"AFSK": 0.85}, 
+                "engine": "audio-heuristic"
+            }
 
     modulation = str(ov.get("modulation") or MOD_MAP.get(amc["modulation"], "QPSK"))
     manual_modulation = bool(ov.get("modulation"))
@@ -98,6 +106,8 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
             fec_method = "none"
 
     emit("demod", 55)
+    
+    from .ao40 import decode_funcube
     
     if modulation == "AFSK":
         afsk = demodulate_afsk(x, fs=info["sample_rate"], baud=1200)
@@ -133,21 +143,30 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
         dei_bits, dei_name = np.asarray(dei["bits"], dtype=np.uint8), dei["method"]
 
     emit("fec", 82)
-    # Remediation R4: "auto" decodes ONLY on confident blind detection
-    # (detect_fec code-closure test), else routes to none-bypass. Explicit
-    # methods are the analyst's manual override and run as requested.
-    fec = fec_decode(dei_bits, method=fec_method)
-    bits3 = np.asarray(fec["bits"], dtype=np.uint8)
-    fec_info = {"method": fec["method"], "corrected": int(fec.get("corrected", 0)),
-                "bits": int(len(bits3))}
-    if "detection" in fec:
-        fec_info["detection"] = fec["detection"]
+    
+    is_ao73 = is_audio and amc.get("engine") == "audio-heuristic-ao73"
+    
+    if is_ao73:
+        ao40_res = decode_funcube(bits)
+        if ao40_res["success"]:
+            bits3 = np.asarray(ao40_res.get("payload", []), dtype=np.uint8)
+            fec_info = {"method": "FUNcube/AO-40 FEC", "corrected": 0, "bits": len(bits3)}
+            corr = {"hits": [], "num_hits": 1, "framing": {"sync": "FUNcube-1 AO-40 Sync", "header_len": 32}, "header_len_bits": 32, "payload_len_bits": len(bits3), "payload_hex": ao40_res.get("hex", ""), "payload_ascii": [], "ambiguity_trial": "as-is"}
+        else:
+            bits3 = np.asarray([], dtype=np.uint8)
+            fec_info = {"method": "FUNcube/AO-40 FEC", "corrected": 0, "bits": 0}
+            corr = {"hits": [], "num_hits": 0, "framing": {"sync": "FUNcube-1 AO-40 Sync", "header_len": 32}, "payload_hex": "", "payload_ascii": [ao40_res["reason"]], "ambiguity_trial": "failed"}
+    else:
+        fec = fec_decode(dei_bits, method=fec_method)
+        bits3 = np.asarray(fec["bits"], dtype=np.uint8)
+        fec_info = {"method": fec["method"], "corrected": int(fec.get("corrected", 0)),
+                    "bits": int(len(bits3))}
+        if "detection" in fec:
+            fec_info["detection"] = fec["detection"]
 
-    emit("correlate", 90)
-    # bps for ambiguity trials: preserved through bypass/detection paths,
-    # reset to 1 only when an explicit decoder re-framed the bitstream.
-    passthrough = fec_info["method"] in ("none", "none-bypass") or "detection" in fec_info
-    corr = correlate(bits3, bits_per_symbol=int(dem["bits_per_symbol"]) if passthrough else 1)
+        emit("correlate", 90)
+        passthrough = fec_info["method"] in ("none", "none-bypass") or "detection" in fec_info
+        corr = correlate(bits3, bits_per_symbol=int(dem["bits_per_symbol"]) if passthrough else 1)
 
     emit("visualize", 96)
     wf = waterfall(x)

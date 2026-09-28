@@ -5,10 +5,9 @@ export type NavigationTab =
   | 'visualizations' 
   | 'dag-pipeline' 
   | 'reports' 
-  | 'settings'
-  | 'ui-showcase';
+  | 'settings';
 
-export type ModulationType = 'QPSK' | '16-QAM' | '64-QAM' | '8-PSK' | 'BPSK' | 'FSK';
+export type ModulationType = 'AUTO' | 'QPSK' | '16-QAM' | '64-QAM' | '8-PSK' | 'BPSK' | 'FSK';
 
 export type WaveformChannel = 'combined' | 'in-phase' | 'quadrature';
 
@@ -47,6 +46,7 @@ export interface LogEntry {
 }
 
 export interface BackendResult {
+  status?: string;
   file: {
     format: string;
     dtype_origin?: string;
@@ -104,6 +104,8 @@ export interface BackendResult {
     ambiguity_trial: string;
     ax25?: any[];
     csp?: any[];
+    payload_status?: string;
+    frame_valid?: boolean;
   };
   visual: {
     waterfall: number[][];

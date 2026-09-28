@@ -34,17 +34,17 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
       const height = canvas.height;
 
       // Clear with dark tactical background
-      ctx.fillStyle = '#0B110E';
+      ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(0, 0, width, height);
 
       // Draw Oscilloscope Grid Lines
-      ctx.strokeStyle = '#15251E';
+      ctx.strokeStyle = '#E2E8F0';
       ctx.lineWidth = 1;
 
       // Horizontal lines with dB tags
       const hSteps = 6;
       ctx.font = '9px JetBrains Mono';
-      ctx.fillStyle = '#2D4B3C';
+      ctx.fillStyle = '#94A3B8';
       for (let i = 0; i <= hSteps; i++) {
         const y = (height / hSteps) * i;
         ctx.beginPath();
@@ -68,7 +68,7 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
 
       // Draw Center Baseline
       const centerY = height / 2;
-      ctx.strokeStyle = '#1B3529';
+      ctx.strokeStyle = '#CBD5E1';
       ctx.beginPath();
       ctx.moveTo(35, centerY);
       ctx.lineTo(width, centerY);
@@ -112,7 +112,7 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
 
       // Add a subtle glowing shadow under the wave
       ctx.save();
-      ctx.shadowColor = '#10B981';
+      ctx.shadowColor = '#3B82F6';
       ctx.shadowBlur = 8;
       ctx.stroke();
       ctx.restore();
@@ -131,13 +131,13 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
   }, [channel, isPlaying, gain, modulation]);
 
   return (
-    <div id="card-time-domain-waveform" className="rounded-xl bg-[#0C1310] border border-[#16251E] p-4 flex flex-col h-full">
+    <div id="card-time-domain-waveform" className="rounded-xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col h-full">
       {/* Card Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div className="flex items-center space-x-2">
-          <span className="flex h-2 w-2 rounded-full bg-emerald-400"></span>
+          <span className="flex h-2 w-2 rounded-full bg-blue-500"></span>
           <div>
-            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-200 uppercase">
+            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-900 uppercase">
               TIME DOMAIN WAVEFORM
             </h3>
             <span className="text-[10px] text-slate-500 font-mono">Real-time Oscilloscope Capture</span>
@@ -149,14 +149,14 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
           <div className="relative">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-[#101A16] border border-[#1D3227] text-[11px] font-mono text-emerald-400 hover:border-emerald-500/50"
+              className="flex items-center space-x-1.5 px-2.5 py-1 rounded bg-slate-50 border border-slate-200 text-[11px] font-mono text-blue-600 hover:border-blue-500/50"
             >
               <span>{channel === 'combined' ? 'IQ (Combined)' : channel === 'in-phase' ? 'I (In-Phase)' : 'Q (Quadrature)'}</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-1 w-40 bg-[#0F1714] border border-[#1E3328] rounded-lg shadow-xl py-1 z-30 font-mono text-xs">
+              <div className="absolute right-0 mt-1 w-40 bg-white border border-slate-200 rounded-lg shadow-xl py-1 z-30 font-mono text-xs">
                 {(['combined', 'in-phase', 'quadrature'] as WaveformChannel[]).map((ch) => (
                   <button
                     key={ch}
@@ -164,8 +164,8 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
                       onChangeChannel(ch);
                       setIsDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-emerald-950/40 ${
-                      channel === ch ? 'text-emerald-300 font-semibold' : 'text-slate-400'
+                    className={`w-full text-left px-3 py-1.5 text-[11px] hover:bg-blue-50 ${
+                      channel === ch ? 'text-blue-600 font-semibold' : 'text-slate-600'
                     }`}
                   >
                     {ch === 'combined' ? 'IQ (Combined)' : ch === 'in-phase' ? 'I (In-Phase)' : 'Q (Quadrature)'}
@@ -177,7 +177,7 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
 
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="p-1 rounded bg-[#101A16] border border-[#1D3227] text-slate-400 hover:text-emerald-400"
+            className="p-1 rounded bg-slate-50 border border-slate-200 text-slate-500 hover:text-blue-600"
             title={isPlaying ? 'Pause Sweep' : 'Resume Sweep'}
           >
             {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -186,7 +186,7 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
       </div>
 
       {/* Canvas Area */}
-      <div className="relative flex-1 mt-3 min-h-[170px] w-full rounded-lg overflow-hidden border border-[#15231D] bg-[#0B110E]">
+      <div className="relative flex-1 mt-3 min-h-[170px] w-full rounded-lg overflow-hidden border border-slate-200 bg-slate-50">
         <canvas
           ref={canvasRef}
           width={560}
@@ -194,7 +194,7 @@ export const TimeDomainWaveformCanvas: React.FC<WaveformProps> = ({
           className="w-full h-full block"
         />
         {/* Floating status tag */}
-        <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-[#0D1612]/90 border border-[#1A2C23] text-[9px] font-mono text-emerald-400/90">
+        <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-white/90 border border-slate-200 text-[9px] font-mono text-blue-600 font-bold">
           BANDWIDTH: {analysisResult ? (analysisResult.params.sampling_rate_hz / 1000).toFixed(1) + ' kHz' : '125 kHz'} • GAIN: {gain.toFixed(1)}x
         </div>
       </div>
@@ -229,11 +229,11 @@ export const ConstellationDiagramCanvas: React.FC<ConstellationProps> = ({
       const scale = Math.min(width, height) * 0.36;
 
       // Dark tactical canvas background
-      ctx.fillStyle = '#0B110E';
+      ctx.fillStyle = '#F8FAFC';
       ctx.fillRect(0, 0, width, height);
 
       // Draw Grid & Axes
-      ctx.strokeStyle = '#15251E';
+      ctx.strokeStyle = '#E2E8F0';
       ctx.lineWidth = 1;
 
       // Coordinate Concentric Circles
@@ -244,7 +244,7 @@ export const ConstellationDiagramCanvas: React.FC<ConstellationProps> = ({
       });
 
       // Axis lines: I (Horizontal) & Q (Vertical)
-      ctx.strokeStyle = '#1D352A';
+      ctx.strokeStyle = '#CBD5E1';
       ctx.beginPath();
       ctx.moveTo(15, centerY);
       ctx.lineTo(width - 15, centerY);
@@ -254,7 +254,7 @@ export const ConstellationDiagramCanvas: React.FC<ConstellationProps> = ({
 
       // Axis labels
       ctx.font = '10px JetBrains Mono';
-      ctx.fillStyle = '#4B705E';
+      ctx.fillStyle = '#94A3B8';
       ctx.fillText('+Q', centerX + 6, 22);
       ctx.fillText('+I', width - 26, centerY - 6);
       ctx.fillText('-I', 8, centerY - 6);
@@ -283,26 +283,26 @@ export const ConstellationDiagramCanvas: React.FC<ConstellationProps> = ({
   }, [modulation, analysisResult]);
 
   return (
-    <div id="card-constellation-diagram" className="rounded-xl bg-[#0C1310] border border-[#16251E] p-4 flex flex-col h-full">
+    <div id="card-constellation-diagram" className="rounded-xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
+      <div className="flex items-center justify-between pb-3 border-b border-slate-200">
         <div className="flex items-center space-x-2">
-          <Compass className="w-4 h-4 text-emerald-400" />
+          <Compass className="w-4 h-4 text-blue-500" />
           <div>
-            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-200 uppercase">
+            <h3 className="text-xs font-mono font-bold tracking-wider text-slate-900 uppercase">
               CONSTELLATION DIAGRAM
             </h3>
             <span className="text-[10px] text-slate-500 font-mono">I/Q Complex Phase Scatter</span>
           </div>
         </div>
 
-        <div className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 font-bold">
+        <div className="px-2 py-0.5 rounded bg-blue-50 border border-blue-200 text-[10px] font-mono text-blue-600 font-bold">
           {modulation} (M={modulation === '16-QAM' ? 16 : modulation === '8-PSK' ? 8 : 4})
         </div>
       </div>
 
       {/* Canvas Area */}
-      <div className="relative flex-1 mt-3 min-h-[170px] w-full rounded-lg overflow-hidden border border-[#15231D] bg-[#0B110E] flex items-center justify-center">
+      <div className="relative flex-1 mt-3 min-h-[170px] w-full rounded-lg overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center">
         <canvas
           ref={canvasRef}
           width={280}
@@ -310,8 +310,8 @@ export const ConstellationDiagramCanvas: React.FC<ConstellationProps> = ({
           className="w-full h-full block"
         />
 
-        <div className="absolute bottom-2 left-2 text-[9px] font-mono text-slate-500 bg-[#0B110E]/80 px-2 py-0.5 rounded border border-[#15231D]">
-          POINTS: <span className="text-emerald-400 font-bold">{analysisResult?.visual?.constellation?.length ?? 0}</span> • SNR: <span className="text-emerald-400">N/A</span>
+        <div className="absolute bottom-2 left-2 text-[9px] font-mono text-slate-400 bg-slate-50/80 px-2 py-0.5 rounded border border-slate-200">
+          POINTS: <span className="text-blue-600 font-bold">{analysisResult?.visual?.constellation?.length ?? 0}</span> • SNR: <span className="text-blue-600">N/A</span>
         </div>
       </div>
     </div>

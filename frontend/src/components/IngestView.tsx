@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { SignalSample, DAGStep, LogEntry, ModulationType, BackendResult } from '../types';
 import { INITIAL_DAG_STEPS } from '../data/mockSignals';
+import { getApiUrl } from '../api/client';
 
 interface IngestViewProps {
   activeSignal: SignalSample;
@@ -28,6 +29,8 @@ interface IngestViewProps {
   onAnalysisStart: () => void;
   onAnalysisComplete: (result: BackendResult, jobId: string) => void;
   analysisResult?: BackendResult | null;
+  dagSteps: DAGStep[];
+  setDagSteps: React.Dispatch<React.SetStateAction<DAGStep[]>>;
 }
 
 export const IngestView: React.FC<IngestViewProps> = ({
@@ -40,15 +43,17 @@ export const IngestView: React.FC<IngestViewProps> = ({
   onAnalysisStart,
   onAnalysisComplete,
   analysisResult,
+  dagSteps,
+  setDagSteps,
 }) => {
   const [sampleRate, setSampleRate] = useState<number>(activeSignal.sampleRate || 100000);
-  const [modulationOverride, setModulationOverride] = useState<ModulationType>('16-QAM');
+  const [modulationOverride, setModulationOverride] = useState<ModulationType>('AUTO');
   const [deinterleaver, setDeinterleaver] = useState('NONE');
   const [fecDecoder, setFecDecoder] = useState('NONE');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasDecoded, setHasDecoded] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [dagSteps, setDagSteps] = useState<DAGStep[]>(INITIAL_DAG_STEPS);
+  
   const [selectedStep, setSelectedStep] = useState<DAGStep | null>(dagSteps[3]); // AMC selected
   const [fileName, setFileName] = useState<string>('');
   const [fileObj, setFileObj] = useState<File | null>(null);
@@ -64,7 +69,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
     onAnalysisStart();
     
     // Reset steps to pending
-    setDagSteps(prev => prev.map(s => ({ ...s, status: 'pending' })));
+    setDagSteps(prev => prev.map(s => ({ ...s, status: 'pending', details: 'Waiting...', latencyMs: 0 })));
 
     onAddLog({
       timestamp: new Date().toTimeString().split(' ')[0],
@@ -76,11 +81,14 @@ export const IngestView: React.FC<IngestViewProps> = ({
       // 1. Upload
       const formData = new FormData();
       formData.append('file', fileObj);
-      const upRes = await fetch((import.meta.env.VITE_API_URL || '') + '/api/upload', {
+      const upRes = await fetch(getApiUrl('/api/upload'), {
         method: 'POST',
         body: formData
       });
-      if (!upRes.ok) throw new Error(await upRes.text());
+      if (!upRes.ok) {
+        const errText = await upRes.text();
+        throw new Error(`Upload failed (${upRes.status}): ${errText}`);
+      }
       const { job_id } = await upRes.json();
 
       onAddLog({
@@ -90,26 +98,34 @@ export const IngestView: React.FC<IngestViewProps> = ({
       });
 
       // 2. Start Analyze
-      const anRes = await fetch((import.meta.env.VITE_API_URL || '') + `/api/analyze/${job_id}`, {
+      const analyzePayload: any = {
+        sample_rate_hz: sampleRate,
+        deinterleaver: deinterleaver.toLowerCase().includes("none") ? "none" : deinterleaver,
+        fec: fecDecoder.toLowerCase().includes("none") ? "none" : fecDecoder
+      };
+      if (modulationOverride && modulationOverride !== 'AUTO') {
+        analyzePayload.modulation = modulationOverride;
+      }
+
+      const anRes = await fetch(getApiUrl(`/api/analyze/${job_id}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sample_rate_hz: sampleRate,
-          modulation: modulationOverride,
-          deinterleaver: deinterleaver.toLowerCase().includes("none") ? "none" : deinterleaver,
-          fec: fecDecoder.toLowerCase().includes("none") ? "none" : fecDecoder
-        })
+        body: JSON.stringify(analyzePayload)
       });
-      if (!anRes.ok) throw new Error(await anRes.text());
+      if (!anRes.ok) {
+        const errText = await anRes.text();
+        throw new Error(`Analysis start failed (${anRes.status}): ${errText}`);
+      }
 
       // 3. Poll Status
       setDagSteps(prev => prev.map(s => s.id <= 3 ? { ...s, status: 'running' } : s));
       let currentProgress = 0;
       
       const poll = setInterval(async () => {
-        const res = await fetch((import.meta.env.VITE_API_URL || '') + `/api/results/${job_id}`);
-        if (!res.ok) return;
-        const job = await res.json();
+        try {
+          const res = await fetch(getApiUrl(`/api/results/${job_id}`));
+          if (!res.ok) return;
+          const job = await res.json();
         
         if (job.progress > currentProgress) {
           currentProgress = job.progress;
@@ -124,7 +140,38 @@ export const IngestView: React.FC<IngestViewProps> = ({
 
         if (job.status === "done") {
           clearInterval(poll);
-          setDagSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
+          
+          setDagSteps(prev => prev.map(s => {
+            let details = s.details;
+            let latencyMs = s.latencyMs;
+            const t = job.result?.timing_ms || {};
+            
+            if (s.id === 1) { details = `Sample Rate: ${job.result?.params?.sampling_rate_hz} Hz`; latencyMs = t["init"]; }
+            if (s.id === 2) { details = `Signal presence confirmed`; latencyMs = t["ingest"]; }
+            if (s.id === 3) { details = `Baud rate: ${job.result?.params?.symbol_rate_hz} Bd, CFO: ${job.result?.params?.cfo_hz?.toFixed(1)} Hz`; latencyMs = t["params"]; }
+            if (s.id === 4) { 
+               const conf = job.result?.amc?.confidence ? (job.result.amc.confidence * 100).toFixed(1) + '%' : 'N/A';
+               details = `Classification: ${job.result?.amc?.modulation} (${conf})`; 
+               latencyMs = t["amc"]; 
+            }
+            if (s.id === 5) { details = `Demodulated as ${job.result?.demod?.modulation}`; latencyMs = t["demod"]; }
+            if (s.id === 6) { details = `De-interleaver: ${job.result?.deinterleaver?.method}`; latencyMs = t["deinterleave"]; }
+            if (s.id === 7) { details = `FEC: ${job.result?.fec?.method}`; latencyMs = t["fec"]; }
+            if (s.id === 8) { details = `Protocol: ${job.result?.correlation?.framing?.sync || "Unknown"}`; latencyMs = t["correlate"]; }
+            if (s.id === 9) { details = `Visualizations computed`; latencyMs = t["visualize"]; }
+            if (s.id === 10) { details = `Result: ${job.result?.status || "COMPLETE"}`; latencyMs = t["done"]; }
+            
+            // Fix unresolved status
+            if (s.id === 4 && job.result?.amc?.modulation === "Modulation unresolved") {
+                details = `Modulation Unresolved. Confidence too low.`;
+            }
+            
+            let status = 'completed';
+            if (s.id === 10 && job.result?.status !== "DECODE VALIDATED") status = 'failed';
+            
+            return { ...s, status: status, details, latencyMs };
+          }));
+          
           setIsAnalyzing(false);
           setHasDecoded(true);
           
@@ -148,14 +195,21 @@ export const IngestView: React.FC<IngestViewProps> = ({
             message: `Pipeline Error: ${job.error}`
           });
         }
-      }, 1000);
+      } catch (pollErr) {
+        // Ignore transient polling fetch errors
+      }
+    }, 1000);
 
     } catch (err: any) {
       setIsAnalyzing(false);
+      const isFetchErr = err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError');
+      const errorMsg = isFetchErr
+        ? 'Cannot reach backend server. Please ensure the backend is running at http://localhost:8000.'
+        : `Error: ${err.message}`;
       onAddLog({
         timestamp: new Date().toTimeString().split(' ')[0],
         level: 'ERROR',
-        message: `Error: ${err.message}`
+        message: errorMsg
       });
     }
   };
@@ -197,17 +251,17 @@ export const IngestView: React.FC<IngestViewProps> = ({
         {/* Panel 1: INGEST SIGNAL */}
         <div 
           id="panel-ingest-signal"
-          className="rounded-xl bg-[#0B120F] border border-[#162720] p-5 flex flex-col justify-between"
+          className="rounded-xl bg-white border border-slate-200 p-5 flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
-              <div className="flex items-center space-x-2 text-white">
-                <UploadCloud className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <UploadCloud className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-800">
                   INGEST SIGNAL
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-emerald-400/80 px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-800/30">
+              <span className="text-[10px] font-mono text-blue-600/80 px-2 py-0.5 rounded bg-blue-50 border border-blue-200">
                 RAW IQ / WAV
               </span>
             </div>
@@ -216,16 +270,16 @@ export const IngestView: React.FC<IngestViewProps> = ({
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleFileDrop}
-              className="mt-4 border-2 border-dashed border-[#1E3329] hover:border-emerald-500/50 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-[#090F0C] transition-all cursor-pointer group"
+              className="mt-4 border-2 border-dashed border-slate-300 hover:border-blue-300 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 transition-all cursor-pointer group"
             >
-              <div className="w-12 h-12 rounded-full bg-[#121F19] flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform mb-3 border border-[#1A3125]">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform mb-3 border border-slate-200">
                 <UploadCloud className="w-6 h-6" />
               </div>
-              <p className="text-xs text-slate-300 font-medium">
-                Drag & drop your <span className="text-emerald-400 font-mono">.IQ</span> or <span className="text-emerald-400 font-mono">.WAV</span> file here
+              <p className="text-xs text-slate-700 font-medium">
+                Drag & drop your <span className="text-blue-600 font-mono">.IQ</span> or <span className="text-blue-600 font-mono">.WAV</span> file here
               </p>
               <p className="text-[11px] text-slate-500 my-1.5">or</p>
-              <label className="cursor-pointer px-3.5 py-1.5 rounded-lg bg-[#14231C] hover:bg-[#1A2E25] border border-[#233D30] text-xs font-mono font-semibold text-emerald-300 transition-colors">
+              <label className="cursor-pointer px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-300 text-xs font-mono font-semibold text-blue-600 transition-colors">
                 BROWSE FILES
                 <input
                   type="file"
@@ -246,8 +300,8 @@ export const IngestView: React.FC<IngestViewProps> = ({
               </label>
 
               {fileName && (
-                <div className="mt-3 text-[11px] font-mono text-slate-400 flex items-center space-x-1.5 truncate max-w-full">
-                  <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <div className="mt-3 text-[11px] font-mono text-slate-600 flex items-center space-x-1.5 truncate max-w-full">
+                  <FileText className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                   <span className="truncate">{fileName}</span>
                 </div>
               )}
@@ -255,7 +309,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
 
             {/* Base Sample Rate Input */}
             <div className="mt-4">
-              <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+              <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5 font-semibold">
                 BASE SAMPLE RATE (HZ)
               </label>
               <input
@@ -263,7 +317,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
                 type="number"
                 value={sampleRate}
                 onChange={(e) => setSampleRate(Number(e.target.value))}
-                className="w-full px-3.5 py-2 rounded-lg bg-[#0E1713] border border-[#1C3026] text-white font-mono text-xs focus:outline-none focus:border-emerald-500/70"
+                className="w-full px-3.5 py-2 rounded-lg bg-white border border-slate-200 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500/70"
                 placeholder="100000"
               />
               <p className="text-[10px] text-slate-500 font-mono mt-1.5">
@@ -273,7 +327,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
           </div>
 
           {/* Quick Demo Preload Buttons */}
-          <div className="pt-3 mt-4 border-t border-[#16251E]">
+          <div className="pt-3 mt-4 border-t border-slate-200">
             <span className="text-[10px] font-mono text-slate-500 block mb-2">QUICK TACTICAL PRESETS:</span>
             <div className="grid grid-cols-2 gap-1.5">
               {presetSignals.slice(0, 2).map((sig) => (
@@ -285,7 +339,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
                     setSampleRate(sig.sampleRate);
                     setModulationOverride(sig.modulation);
                   }}
-                  className="px-2 py-1.5 rounded bg-[#101915] hover:bg-[#16241E] border border-[#1A2E24] text-[10px] font-mono text-slate-300 hover:text-emerald-300 text-left truncate transition-colors"
+                  className="px-2 py-1.5 rounded bg-slate-50 hover:bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-700 hover:text-blue-600 text-left truncate transition-colors"
                 >
                   {sig.name.split(' ')[0]} ({sig.modulation})
                 </button>
@@ -297,50 +351,51 @@ export const IngestView: React.FC<IngestViewProps> = ({
         {/* Panel 2: ANALYSIS CONFIGURATION */}
         <div 
           id="panel-analysis-configuration"
-          className="rounded-xl bg-[#0B120F] border border-[#162720] p-5 flex flex-col justify-between"
+          className="rounded-xl bg-white border border-slate-200 p-5 flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
-              <div className="flex items-center space-x-2 text-white">
-                <Settings2 className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <Settings2 className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-800">
                   ANALYSIS CONFIGURATION
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-emerald-400/80">DSP STACK</span>
+              <span className="text-[10px] font-mono text-blue-600/80">DSP STACK</span>
             </div>
 
             <div className="space-y-4 mt-4">
               {/* Modulation Override Dropdown */}
               <div>
-                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5 font-semibold">
                   MODULATION OVERRIDE
                 </label>
                 <select
                   id="select-modulation-override"
                   value={modulationOverride}
                   onChange={(e) => setModulationOverride(e.target.value as ModulationType)}
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0E1713] border border-[#1C3026] text-white font-mono text-xs focus:outline-none focus:border-emerald-500/70 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500/70 cursor-pointer"
                 >
-                  <option value="QAM-16">QAM-16 (16-ary Quadrature)</option>
+                  <option value="AUTO">AUTO (Automatic Modulation Classification)</option>
+                  <option value="BPSK">BPSK (Binary Phase)</option>
                   <option value="QPSK">QPSK (Quadrature Phase)</option>
                   <option value="8-PSK">8-PSK (8-Phase Shift)</option>
+                  <option value="QAM-16">QAM-16 (16-ary Quadrature)</option>
                   <option value="64-QAM">64-QAM (High-order)</option>
-                  <option value="BPSK">BPSK (Binary Phase)</option>
                   <option value="FSK">FSK (Frequency Shift)</option>
                 </select>
               </div>
 
               {/* De-interleaver Dropdown */}
               <div>
-                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5 font-semibold">
                   DE-INTERLEAVER
                 </label>
                 <select
                   id="select-deinterleaver"
                   value={deinterleaver}
                   onChange={(e) => setDeinterleaver(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0E1713] border border-[#1C3026] text-white font-mono text-xs focus:outline-none focus:border-emerald-500/70 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500/70 cursor-pointer"
                 >
                   <option value="CONVOLUTIONAL">CONVOLUTIONAL (Matrix Depth 16)</option>
                   <option value="BLOCK">BLOCK INTERLEAVER (CCSDS)</option>
@@ -351,14 +406,14 @@ export const IngestView: React.FC<IngestViewProps> = ({
 
               {/* FEC Decoder Dropdown */}
               <div>
-                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5 font-semibold">
+                <label className="block text-[11px] font-mono uppercase tracking-wider text-slate-500 mb-1.5 font-semibold">
                   FEC DECODER
                 </label>
                 <select
                   id="select-fec-decoder"
                   value={fecDecoder}
                   onChange={(e) => setFecDecoder(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-lg bg-[#0E1713] border border-[#1C3026] text-white font-mono text-xs focus:outline-none focus:border-emerald-500/70 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-lg bg-white border border-slate-200 text-slate-900 font-mono text-xs focus:outline-none focus:border-blue-500/70 cursor-pointer"
                 >
                   <option value="NONE">NONE / BYPASS</option>
                   <option value="VITERBI 1/2">VITERBI 1/2 (K=7, Polynomial G1=171, G2=133)</option>
@@ -371,20 +426,20 @@ export const IngestView: React.FC<IngestViewProps> = ({
           </div>
 
           {/* Run Signal Analysis Button */}
-          <div className="pt-4 mt-4 border-t border-[#16251E]">
+          <div className="pt-4 mt-4 border-t border-slate-200">
             <button
               id="btn-run-signal-analysis"
               onClick={handleRunAnalysis}
               disabled={isAnalyzing}
               className={`w-full py-3 px-4 rounded-xl font-mono text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer ${
                 isAnalyzing
-                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/50 cursor-wait'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_28px_rgba(16,185,129,0.5)]'
+                  ? 'bg-blue-50 text-blue-600 border border-blue-300 cursor-wait'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
               }`}
             >
               {isAnalyzing ? (
                 <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                   <span>EXECUTING DAG PIPELINE...</span>
                 </>
               ) : (
@@ -400,13 +455,13 @@ export const IngestView: React.FC<IngestViewProps> = ({
         {/* Panel 3: DECODED OUTPUT */}
         <div 
           id="panel-decoded-output"
-          className="rounded-xl bg-[#0B120F] border border-[#162720] p-5 flex flex-col justify-between"
+          className="rounded-xl bg-white border border-slate-200 p-5 flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
-              <div className="flex items-center space-x-2 text-white">
-                <FileCode2 className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <FileCode2 className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-800">
                   DECODED OUTPUT
                 </h3>
               </div>
@@ -414,10 +469,10 @@ export const IngestView: React.FC<IngestViewProps> = ({
                 id="btn-copy-output"
                 onClick={handleCopyPayload}
                 disabled={!hasDecoded}
-                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-[#101915] border border-[#1B2F25] text-[11px] font-mono text-slate-300 hover:text-emerald-400 transition-colors"
+                className="flex items-center space-x-1 px-2.5 py-1 rounded bg-slate-50 border border-slate-200 text-[11px] font-mono text-slate-700 hover:text-blue-600 transition-colors"
                 title="Copy to clipboard"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-blue-600" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
@@ -426,24 +481,24 @@ export const IngestView: React.FC<IngestViewProps> = ({
             {hasDecoded ? (
               <div className="mt-4 space-y-3 font-mono text-xs">
                 {/* Hex Dump Section */}
-                <div className="bg-[#080E0B] p-3 rounded-lg border border-[#15251E]">
-                  <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider flex items-center justify-between">
+                <div className="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                  <div className="text-[10px] text-blue-400 font-semibold mb-1 uppercase tracking-wider flex items-center justify-between">
                     <span>FRAME HEXSTREAM</span>
-                    <span className="text-slate-500">{bitsCount} BITS</span>
+                    <span className="text-slate-400">{bitsCount} BITS</span>
                   </div>
                   <div className="text-slate-300 space-y-0.5 text-[11px] select-text">
                     {hexPayloadRows.map((row, idx) => (
                       <div key={idx} className="flex space-x-2">
-                        <span className="text-slate-600">0x{(idx * 16).toString(16).padStart(4, '0')}:</span>
-                        <span className="text-emerald-400/90">{row}</span>
+                        <span className="text-slate-500">0x{(idx * 16).toString(16).padStart(4, '0')}:</span>
+                        <span className="text-blue-300">{row}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
                 {/* Decoded ASCII / Protocol Telemetry */}
-                <div className="bg-[#080E0B] p-3 rounded-lg border border-[#15251E]">
-                  <div className="text-[10px] text-emerald-500 font-semibold mb-1 uppercase tracking-wider">
+                <div className="bg-slate-800 p-3 rounded-lg border border-slate-700">
+                  <div className="text-[10px] text-blue-400 font-semibold mb-1 uppercase tracking-wider">
                     PARSED PROTOCOL PAYLOAD
                   </div>
                   <p className="text-[11px] text-slate-200 leading-relaxed break-words select-text whitespace-pre-wrap">
@@ -453,10 +508,10 @@ export const IngestView: React.FC<IngestViewProps> = ({
               </div>
             ) : (
               <div className="my-14 flex flex-col items-center justify-center text-center p-6">
-                <div className="w-12 h-12 rounded-xl bg-[#101815] border border-[#182C22] flex items-center justify-center text-slate-600 mb-3">
+                <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-500 mb-3">
                   <Terminal className="w-6 h-6" />
                 </div>
-                <h4 className="text-xs font-mono font-bold tracking-widest uppercase text-slate-300">
+                <h4 className="text-xs font-mono font-bold tracking-widest uppercase text-slate-700">
                   AWAITING SIGNAL
                 </h4>
                 <p className="text-[11px] text-slate-500 max-w-xs mt-1 leading-relaxed">
@@ -466,9 +521,9 @@ export const IngestView: React.FC<IngestViewProps> = ({
             )}
           </div>
 
-          <div className="pt-3 mt-4 border-t border-[#16251E] flex justify-between items-center text-[10px] font-mono text-slate-500">
-            <span>BIT ERROR RATE: <span className="text-emerald-400 font-bold">{bitErrorRate}</span></span>
-            <span>FRAME SYNC: <span className="text-emerald-400">{frameSync}</span></span>
+          <div className="pt-3 mt-4 border-t border-slate-200 flex justify-between items-center text-[10px] font-mono text-slate-500">
+            <span>BIT ERROR RATE: <span className="text-blue-600 font-bold">{bitErrorRate}</span></span>
+            <span>FRAME SYNC: <span className="text-blue-600">{frameSync}</span></span>
           </div>
         </div>
       </div>
@@ -479,17 +534,17 @@ export const IngestView: React.FC<IngestViewProps> = ({
         {/* Left 2 Cols: DAG PIPELINE */}
         <div 
           id="panel-dag-pipeline"
-          className="lg:col-span-2 rounded-xl bg-[#0B120F] border border-[#162720] p-5 flex flex-col justify-between"
+          className="lg:col-span-2 rounded-xl bg-white border border-slate-200 p-5 flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
-              <div className="flex items-center space-x-2 text-white">
-                <Layers className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <Layers className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-800">
                   DAG PIPELINE
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-slate-400">
+              <span className="text-[10px] font-mono text-slate-500">
                 10 ACTIVE PROCESSING STAGES
               </span>
             </div>
@@ -498,7 +553,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
             <div className="mt-6 overflow-x-auto pb-2">
               <div className="flex items-center justify-between min-w-[620px] relative px-2">
                 {/* Connecting track line behind nodes */}
-                <div className="absolute top-3.5 left-4 right-4 h-0.5 bg-[#182C22] -z-0"></div>
+                <div className="absolute top-3.5 left-4 right-4 h-0.5 bg-slate-200 -z-0"></div>
 
                 {dagSteps.map((step) => {
                   const isCompleted = step.status === 'completed';
@@ -514,23 +569,23 @@ export const IngestView: React.FC<IngestViewProps> = ({
                       {/* Node number badge */}
                       <div className={`w-7 h-7 rounded-md flex items-center justify-center font-mono text-xs font-bold transition-all ${
                         isRunning
-                          ? 'bg-amber-500 text-black animate-pulse shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                          ? 'bg-amber-100 text-amber-700 animate-pulse shadow-sm border border-amber-300'
                           : isCompleted
                           ? step.id === 10
-                            ? 'bg-emerald-950 text-emerald-300 border-2 border-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
-                            : 'bg-[#101B16] text-emerald-400 border border-emerald-500/50'
-                          : 'bg-[#0E1513] text-slate-600 border border-[#1A2C23]'
-                      } ${isCurrentSelected ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-[#0B120F]' : ''}`}>
+                            ? 'bg-blue-50 text-blue-600 border-2 border-blue-400 shadow-sm'
+                            : 'bg-slate-50 text-blue-600 border border-blue-300'
+                          : 'bg-white text-slate-500 border border-slate-200'
+                      } ${isCurrentSelected ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white' : ''}`}>
                         {step.id}
                       </div>
 
                       {/* Step Name Label */}
                       <span className={`text-[9px] font-mono tracking-wider font-bold mt-2 uppercase ${
                         isRunning
-                          ? 'text-amber-400'
+                          ? 'text-amber-600'
                           : isCompleted
-                          ? 'text-emerald-400'
-                          : 'text-slate-600'
+                          ? 'text-blue-600'
+                          : 'text-slate-500'
                       }`}>
                         {step.name}
                       </span>
@@ -542,15 +597,15 @@ export const IngestView: React.FC<IngestViewProps> = ({
 
             {/* Selected Step Detail Inspector */}
             {selectedStep && (
-              <div className="mt-5 p-3.5 rounded-lg bg-[#080E0B] border border-[#172720] flex items-center justify-between text-xs font-mono">
+              <div className="mt-5 p-3.5 rounded-lg bg-slate-50 border border-slate-200 flex items-center justify-between text-xs font-mono">
                 <div>
-                  <span className="text-emerald-400 font-bold">Stage {selectedStep.id}: {selectedStep.name}</span>
-                  <span className="text-slate-400 ml-2">({selectedStep.label})</span>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{selectedStep.details}</p>
+                  <span className="text-blue-600 font-bold">Stage {selectedStep.id}: {selectedStep.name}</span>
+                  <span className="text-slate-500 ml-2">({selectedStep.label})</span>
+                  <p className="text-[11px] text-slate-500 mt-0.5">{selectedStep.details}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <span className="text-[10px] text-slate-500 block">LATENCY</span>
-                  <span className="text-emerald-400 font-bold">{selectedStep.latencyMs} ms</span>
+                  <span className="text-blue-600 font-bold">{selectedStep.latencyMs} ms</span>
                 </div>
               </div>
             )}
@@ -560,42 +615,42 @@ export const IngestView: React.FC<IngestViewProps> = ({
         {/* Right 1 Col: SYSTEM LOG (Matching Screenshot 2) */}
         <div 
           id="panel-system-log"
-          className="rounded-xl bg-[#0B120F] border border-[#162720] p-5 flex flex-col justify-between"
+          className="rounded-xl bg-white border border-slate-200 p-5 flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-[#16251E]">
-              <div className="flex items-center space-x-2 text-white">
-                <Terminal className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
+              <div className="flex items-center space-x-2 text-slate-900">
+                <Terminal className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xs font-mono font-bold tracking-wider uppercase text-slate-800">
                   SYSTEM LOG
                 </h3>
               </div>
               <button
                 id="btn-clear-logs"
                 onClick={onClearLogs}
-                className="px-2 py-0.5 rounded bg-[#101915] border border-[#1A2E24] text-[10px] font-mono text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[10px] font-mono text-slate-600 hover:text-slate-800 transition-colors cursor-pointer"
               >
                 Clear
               </button>
             </div>
 
             {/* Log Terminal Window */}
-            <div className="mt-3 bg-[#080D0B] p-3 rounded-lg border border-[#14221A] font-mono text-[10px] space-y-1.5 h-48 overflow-y-auto">
+            <div className="mt-3 bg-slate-900 p-3 rounded-lg border border-slate-700 font-mono text-[10px] space-y-1.5 h-48 overflow-y-auto">
               {logs.map((log) => (
                 <div key={log.id} className="flex items-start space-x-2 leading-tight">
-                  <span className="text-slate-600 shrink-0">{log.timestamp}</span>
+                  <span className="text-slate-500 shrink-0">{log.timestamp}</span>
                   <span className={`shrink-0 font-bold ${
                     log.level === 'INFO'
-                      ? 'text-slate-400'
+                      ? 'text-slate-300'
                       : log.level === 'ANALYSIS'
-                      ? 'text-teal-400'
+                      ? 'text-cyan-400'
                       : log.level === 'SUCCESS'
-                      ? 'text-emerald-400'
+                      ? 'text-blue-400'
                       : 'text-amber-400'
                   }`}>
                     {log.level}
                   </span>
-                  <span className="text-slate-300 break-words">{log.message}</span>
+                  <span className="text-slate-200 break-words">{log.message}</span>
                 </div>
               ))}
             </div>
@@ -603,7 +658,7 @@ export const IngestView: React.FC<IngestViewProps> = ({
 
           <div className="pt-2 text-[10px] font-mono text-slate-500 flex justify-between">
             <span>DAEMON: rf_dsp_v2</span>
-            <span className="text-emerald-400">ACTIVE PID 8941</span>
+            <span className="text-blue-600">ACTIVE PID 8941</span>
           </div>
         </div>
 

@@ -46,15 +46,15 @@ export const LiveSpectrumAudioVisualizer: React.FC<LiveSpectrumProps> = ({
             className="w-1.5 rounded-t-sm transition-all duration-75"
             style={{
               height: `${h}%`,
-              backgroundColor: h > 60 ? '#34D399' : h > 30 ? '#10B981' : '#059669',
-              boxShadow: h > 70 ? '0 0 8px rgba(16, 185, 129, 0.4)' : 'none',
+              backgroundColor: h > 60 ? '#3B82F6' : h > 30 ? '#2563EB' : '#1D4ED8',
+              boxShadow: h > 70 ? '0 0 8px rgba(59, 130, 246, 0.4)' : 'none',
               opacity: 0.85 + (h / 200),
             }}
           />
         ))}
       </div>
-      <div className="text-[10px] tracking-widest uppercase font-mono font-bold text-emerald-400 mt-2 flex items-center space-x-1.5">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      <div className="text-[10px] tracking-widest uppercase font-mono font-bold text-blue-600 mt-2 flex items-center space-x-1.5">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
         <span>LIVE SIGNAL ANALYSIS</span>
       </div>
     </div>

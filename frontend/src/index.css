@@ -2,19 +2,19 @@
 
 @layer base {
   :root {
-    --bg-base: #080B0A;
-    --bg-surface: #0E1412;
-    --bg-card: #121916;
-    --border-tactical: #1A2822;
-    --border-tactical-hover: #263C33;
-    --accent-emerald: #10B981;
-    --accent-mint: #34D399;
-    --accent-glow: rgba(16, 185, 129, 0.15);
+    --bg-base: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --border-tactical: #E2E8F0;
+    --border-tactical-hover: #CBD5E1;
+    --accent-emerald: #3B82F6;
+    --accent-mint: #60A5FA;
+    --accent-glow: rgba(59, 130, 246, 0.15);
   }
 
   body {
     background-color: var(--bg-base);
-    color: #E2E8F0;
+    color: #1E293B;
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   }
 
@@ -33,21 +33,17 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #090D0C;
+  background: #E2E8F0;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1C2B24;
+  background: #94A3B8;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #10B981;
+  background: #3B82F6;
 }
 
 /* Subtle tactical grid background */
 .tactical-grid-bg {
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, rgba(20, 36, 30, 0.25) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(20, 36, 30, 0.25) 1px, transparent 1px);
+  display: none;
 }
-

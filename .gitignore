@@ -12,4 +12,13 @@ node_modules/
 frontend/.next/
 frontend/out/
 .env
+.env.*
 .DS_Store
+scratch/
+*.log
+out_*.txt
+patch_*.py
+test_ao73.py
+test_fsk.py
+test_pipeline.py
+run_test.bat

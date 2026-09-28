@@ -12,20 +12,19 @@ import { VisualizationsView } from './components/VisualizationsView';
 import { DAGPipelineView } from './components/DAGPipelineView';
 import { ReportsView } from './components/ReportsView';
 import { SettingsView } from './components/SettingsView';
-import { UIShowcaseModal } from './components/UIShowcaseModal';
 import { CommandPalette } from './components/CommandPalette';
-import { PRESET_SIGNALS } from './data/mockSignals';
+import { PRESET_SIGNALS, INITIAL_DAG_STEPS } from './data/mockSignals';
 import { NavigationTab, SignalSample, LogEntry, BackendResult } from './types';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<NavigationTab>('dashboard');
   const [presetSignals, setPresetSignals] = useState<SignalSample[]>(PRESET_SIGNALS);
   const [activeSignal, setActiveSignal] = useState<SignalSample>(PRESET_SIGNALS[0]);
-  const [isDesignSystemOpen, setIsDesignSystemOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   
   // Real backend result state
   const [analysisResult, setAnalysisResult] = useState<BackendResult | null>(null);
+  const [dagSteps, setDagSteps] = useState(INITIAL_DAG_STEPS);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
 
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -42,12 +41,11 @@ export default function App() {
   };
 
   return (
-    <div id="app-root-shell" className="flex h-screen w-screen overflow-hidden bg-[#080B0A] text-slate-100 font-sans tactical-grid-bg">
+    <div id="app-root-shell" className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] text-slate-900 font-sans">
       {/* Tactical Navigation Sidebar */}
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
-        onOpenDesignSystem={() => setIsDesignSystemOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -80,6 +78,8 @@ export default function App() {
 
           {(currentTab === 'ingest' || currentTab === 'analysis') && (
             <IngestView
+              dagSteps={dagSteps}
+              setDagSteps={setDagSteps}
               activeSignal={activeSignal}
               presetSignals={presetSignals}
               onSelectSignal={setActiveSignal}
@@ -106,7 +106,7 @@ export default function App() {
           )}
 
           {currentTab === 'dag-pipeline' && (
-            <DAGPipelineView onRunDAG={() => {}} />
+            <DAGPipelineView dagSteps={dagSteps} />
           )}
 
           {currentTab === 'reports' && (
@@ -123,13 +123,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      {/* Design System & Corporate UI Spec Modal */}
-      <UIShowcaseModal
-        isOpen={isDesignSystemOpen}
-        onClose={() => setIsDesignSystemOpen(false)}
-        onNavigateTab={setCurrentTab}
-      />
 
       {/* Ctrl+K Search Palette */}
       <CommandPalette

@@ -14,11 +14,9 @@ from .csp import parse_csp_header
 
 SYNC_WORDS = {
     "Barker-13 (802.11/radar)": [1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0, 1],
-    "HDLC flag 0x7E": [0, 1, 1, 1, 1, 1, 1, 0],
     "802.11 SFD 0xF3A0-ish16": [1, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0],
     "CCSDS ASM 0x1ACFFC1D (32b)": [int(b) for b in format(0x1ACFFC1D, "032b")],
     "GSM SCH": [1,0,1,1,1,0,0,1,0,1,1,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,1,1,1,0,0,1,0,1,1,0,1,0,1,0,0,0,1,0,1,0,1,1,1,0,1,1,0,0,0,0,1,1,0,1,1],
-    "Preamble-16 alternating": [0, 1] * 8,
 }
 
 # Alternating preambles match ANY alternating-ish data (including wrongly
@@ -189,15 +187,29 @@ def correlate(bits: np.ndarray, max_mismatch: int = 2, bits_per_symbol: int = 1)
     payload_hex = bytes(np.packbits(payload_bits[: nbytes * 8])).hex() if nbytes else ""
     ascii_runs = bits_to_ascii_runs(rb)
     
+    # PAYLOAD VALIDATION
+    is_valid = False
+    status = "unvalidated"
+    if ax25_packets or csp_packets:
+        is_valid = True
+        status = "validated"
+    else:
+        strong_hits = [h for h in hits if not h.get("weak") and h.get("mismatches", 0) == 0]
+        if strong_hits:
+            is_valid = True
+            status = "validated"
+
     ret = {
         "hits": hits[:50],
         "num_hits": len(hits),
         "framing": framing,
         "header_len_bits": int(len(header_bits)),
         "payload_len_bits": int(len(payload_bits)),
-        "payload_hex": payload_hex[:2048],
-        "payload_hex_truncated": len(payload_hex) > 2048,
-        "payload_ascii": ascii_runs[:5],
+        "payload_hex": payload_hex[:2048] if is_valid else "",
+        "payload_hex_truncated": len(payload_hex) > 2048 if is_valid else False,
+        "payload_ascii": ascii_runs[:5] if is_valid else (["Decode not validated"] if len(b) > 0 else []),
+        "payload_status": status,
+        "frame_valid": is_valid,
         "ambiguity_trial": res["trial"],
     }
     if ax25_packets:

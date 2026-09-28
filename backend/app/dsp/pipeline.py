@@ -8,6 +8,7 @@ sync fails) -> correlate w/ ambiguity resolution -> visualize -> report.
 from __future__ import annotations
 from typing import Callable
 import numpy as np
+import time
 
 from .ingestion import load_signal
 from .burst import extract_burst
@@ -34,7 +35,16 @@ def _score_demod(bits: np.ndarray, bps: int) -> float:
 def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = None) -> dict:
     ov = overrides or {}
 
+    timing = {}
+    _last_time = [time.time()]
+    _last_step = ["init"]
+    
     def emit(step: str, pct: int):
+        now = time.time()
+        elapsed = round((now - _last_time[0]) * 1000, 2)
+        timing[_last_step[0]] = elapsed
+        _last_time[0] = now
+        _last_step[0] = step
         if progress:
             try:
                 progress(step, pct)
@@ -172,9 +182,34 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
     wf = waterfall(x)
     const = constellation_points(best["dem"]["symbols"] if "symbols" in best["dem"] else x, sps_hint=1 if "symbols" in best["dem"] else sps)
     raw_psd = psd_db(x, 1024); psd = [round(float(v), 2) for v in raw_psd[::(len(raw_psd)//256)][:256]]
+    
+    # Decimate waveform for frontend time-domain plotting (max 1000 points)
+    step = max(1, len(x) // 1000)
+    x_dec = x[::step][:1000]
+    # Normalize for display
+    rms = float(np.sqrt(np.mean(np.abs(x_dec)**2))) or 1.0
+    x_dec = x_dec / rms
+    waveform = [[round(float(p.real), 3), round(float(p.imag), 3)] for p in x_dec]
 
     emit("done", 100)
+    
+    # 40. FINAL RESULT LOGIC
+    decode_validated = corr.get("frame_valid", False) if isinstance(corr, dict) else False
+    if is_ao73 and ao40_res.get("success"):
+        decode_validated = True
+        
+    final_status = "DECODE VALIDATED" if decode_validated else "DECODE NOT VALIDATED"
+    
+    if float(amc.get("confidence", 0.0)) < 0.80 and not manual_modulation and not decode_validated:
+        amc["hypothesis"] = amc["modulation"]
+        amc["modulation"] = "Modulation unresolved"
+
+    now = time.time()
+    timing[_last_step[0]] = round((now - _last_time[0]) * 1000, 2)
+    
     return {
+        "status": final_status,
+        "timing_ms": timing,
         "file": {"format": info["format"], "dtype_origin": info.get("dtype_origin"),
                  "fs_source": info.get("fs_source"),
                  "samples_analyzed": int(len(x)), "burst": {k: burst.get(k) for k in ("start", "end", "found")},
@@ -189,7 +224,7 @@ def run_pipeline(path: str, overrides: dict | None = None, progress: Progress = 
         "deinterleaver": {"method": dei_name, "bits": int(len(dei_bits))},
         "fec": fec_info,
         "correlation": corr,
-        "visual": {"waterfall": wf, "constellation": const, "psd": psd},
+        "visual": {"waterfall": wf, "constellation": const, "psd": psd, "waveform": waveform},
         "overrides_applied": {"modulation": modulation, "sps": sps,
                               "sample_rate_hz": info["sample_rate"],
                               "deinterleaver": deint_method, "fec": fec_method},

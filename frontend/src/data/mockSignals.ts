@@ -97,9 +97,9 @@ export const PRESET_SIGNALS: SignalSample[] = [
 
 export const INITIAL_DAG_STEPS: DAGStep[] = [
   { id: 1, name: 'INGEST', label: 'Ingest Capture', status: 'completed', latencyMs: 12, details: '100,000 raw complex I/Q samples ingested into memory' },
-  { id: 2, name: 'BURST', label: 'Burst Detection', status: 'completed', latencyMs: 8, details: 'Energy threshold detected active RF pulse (+18.4 dB over noise)' },
-  { id: 3, name: 'PARAMS', label: 'Param Estimation', status: 'completed', latencyMs: 16, details: 'Center freq calibrated: 12.450 GHz, Baud rate: 1000 Bd' },
-  { id: 4, name: 'AMC', label: 'Modulation Classify', status: 'completed', latencyMs: 24, details: 'Automatic Modulation Classification scored QPSK (94.2%)' },
+  { id: 2, name: 'BURST', label: 'Burst Detection', status: 'completed', latencyMs: 8, details: 'Waiting for burst...' },
+  { id: 3, name: 'PARAMS', label: 'Param Estimation', status: 'completed', latencyMs: 16, details: 'Waiting for parameter estimation...' },
+  { id: 4, name: 'AMC', label: 'Modulation Classify', status: 'completed', latencyMs: 24, details: 'Waiting for signal input...' },
   { id: 5, name: 'DEMOD', label: 'Demodulation', status: 'completed', latencyMs: 18, details: 'Costas loop carrier recovery + Gardner timing sync locked' },
   { id: 6, name: 'DEINTERLEAVE', label: 'De-interleaver', status: 'completed', latencyMs: 10, details: 'Convolutional matrix unscrambled, depth 16 recovered' },
   { id: 7, name: 'FEC', label: 'FEC Decoding', status: 'completed', latencyMs: 32, details: 'Viterbi 1/2 decoder applied. Bit error rate: 0.0001 (Clean)' },
